@@ -16,7 +16,7 @@ using Nop.Data.Mapping;
 using StackExchange.Profiling;
 using StackExchange.Profiling.Data;
 
-namespace Nop.Data
+namespace Nop.Data.DataProviders
 {
     public abstract class BaseDataProvider
     {

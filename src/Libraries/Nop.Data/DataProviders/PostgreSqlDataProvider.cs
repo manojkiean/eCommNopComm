@@ -1,38 +1,41 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
+using LinqToDB;
+using LinqToDB.Common;
 using LinqToDB.Data;
 using LinqToDB.DataProvider;
-using LinqToDB.DataProvider.SqlServer;
+using LinqToDB.SqlQuery;
 using Nop.Core;
 using Nop.Core.Infrastructure;
+using Nop.Data.DataProviders.LinqToDB;
 using Nop.Data.Migrations;
+using Npgsql;
 
-namespace Nop.Data
+namespace Nop.Data.DataProviders
 {
-    /// <summary>
-    /// Represents the MS SQL Server data provider
-    /// </summary>
-    public partial class MsSqlNopDataProvider : BaseDataProvider, INopDataProvider
+    public class PostgreSqlDataProvider : BaseDataProvider, INopDataProvider
     {
         #region Utils
 
-        protected virtual SqlConnectionStringBuilder GetConnectionStringBuilder()
+        /// <summary>
+        /// Creates the database connection by the current data configuration
+        /// </summary>
+        protected override DataConnection CreateDataConnection()
         {
-            var connectionString = DataSettingsManager.LoadSettings().ConnectionString;
+            var dataContext = CreateDataConnection(LinqToDbDataProvider);
+            dataContext.MappingSchema.SetDataType(
+                typeof(string),
+                new SqlDataType(new DbDataType(typeof(string), "citext")));
 
-            return new SqlConnectionStringBuilder(connectionString);
+            return dataContext;
         }
 
-        #endregion
-
-        #region Methods
-
+        protected NpgsqlConnectionStringBuilder GetConnectionStringBuilder()
+        {
+            return new NpgsqlConnectionStringBuilder(CurrentConnectionString);
+        }
 
         /// <summary>
         /// Gets a connection to the database for a current data provider
@@ -41,17 +44,47 @@ namespace Nop.Data
         /// <returns>Connection to a database</returns>
         protected override IDbConnection GetInternalDbConnection(string connectionString)
         {
-            if(string.IsNullOrEmpty(connectionString))
+            if (string.IsNullOrEmpty(connectionString))
                 throw new ArgumentException(nameof(connectionString));
 
-            return new SqlConnection(connectionString);
+            return new NpgsqlConnection(connectionString);
         }
 
         /// <summary>
-        /// Create the database
+        /// Get the name of the sequence associated with a identity column
         /// </summary>
-        /// <param name="collation">Collation</param>
-        /// <param name="triesToConnect">Count of tries to connect to the database after creating; set 0 if no need to connect after creating</param>
+        /// <param name="dataConnection">A database connection object</param>
+        /// <typeparam name="TEntity">Entity type</typeparam>
+        /// <returns>Returns the name of the sequence, or NULL if no sequence is associated with the column</returns>
+        private string GetSequenceName<TEntity>(DataConnection dataConnection) where TEntity : BaseEntity
+        {
+            if (dataConnection is null)
+                throw new ArgumentNullException(nameof(dataConnection));
+
+            var descriptor = GetEntityDescriptor<TEntity>();
+
+            if (descriptor is null)
+                throw new NopException($"Mapped entity descriptor is not found: {typeof(TEntity).Name}");
+
+            var tableName = descriptor.TableName;
+            var columnName = descriptor.Columns.FirstOrDefault(x => x.IsIdentity && x.IsPrimaryKey)?.ColumnName;
+
+            if (string.IsNullOrEmpty(columnName))
+                throw new NopException("A table's primary key does not have an identity constraint");
+
+            return dataConnection.Query<string>($"SELECT pg_get_serial_sequence('\"{tableName}\"', '{columnName}');")
+                .FirstOrDefault();
+        }
+
+        #endregion
+
+        #region Methods
+
+        /// <summary>
+        /// Creates the database by using the loaded connection string
+        /// </summary>
+        /// <param name="collation"></param>
+        /// <param name="triesToConnect"></param>
         public void CreateDatabase(string collation, int triesToConnect = 10)
         {
             if (DatabaseExists())
@@ -60,18 +93,19 @@ namespace Nop.Data
             var builder = GetConnectionStringBuilder();
 
             //gets database name
-            var databaseName = builder.InitialCatalog;
+            var databaseName = builder.Database;
 
-            //now create connection string to 'master' dabatase. It always exists.
-            builder.InitialCatalog = "master";
+            //now create connection string to 'master' database. It always exists.
+            builder.Database = null;
 
-            using (var connection = new SqlConnection(builder.ConnectionString))
+            using (var connection = GetInternalDbConnection(builder.ConnectionString))
             {
-                var query = $"CREATE DATABASE [{databaseName}]";
+                var query = $"CREATE DATABASE \"{databaseName}\" WITH OWNER = '{builder.Username}'";
                 if (!string.IsNullOrWhiteSpace(collation))
-                    query = $"{query} COLLATE {collation}";
+                    query = $"{query} LC_COLLATE = '{collation}'";
 
-                var command = new SqlCommand(query, connection);
+                var command = connection.CreateCommand();
+                command.CommandText = query;
                 command.Connection.Open();
 
                 command.ExecuteNonQuery();
@@ -93,7 +127,17 @@ namespace Nop.Data
                 if (!DatabaseExists())
                     Thread.Sleep(1000);
                 else
+                {
+                    builder.Database = databaseName;
+                    using var connection = GetInternalDbConnection(builder.ConnectionString) as NpgsqlConnection;
+                    var command = connection.CreateCommand();
+                    command.CommandText = "CREATE EXTENSION IF NOT EXISTS citext; CREATE EXTENSION IF NOT EXISTS pgcrypto;";
+                    command.Connection.Open();
+                    command.ExecuteNonQuery();
+                    connection.ReloadTypes();
+
                     break;
+                }
             }
         }
 
@@ -105,7 +149,7 @@ namespace Nop.Data
         {
             try
             {
-                using (var connection = new SqlConnection(GetConnectionStringBuilder().ConnectionString))
+                using (var connection = GetInternalDbConnection(CurrentConnectionString))
                 {
                     //just try to connect
                     connection.Open();
@@ -131,34 +175,36 @@ namespace Nop.Data
         /// <summary>
         /// Get the current identity value
         /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
+        /// <typeparam name="TEntity">Entity type</typeparam>
         /// <returns>Integer identity; null if cannot get the result</returns>
-        public virtual int? GetTableIdent<T>() where T : BaseEntity
+        public virtual int? GetTableIdent<TEntity>() where TEntity : BaseEntity
         {
             using var currentConnection = CreateDataConnection();
-            var tableName = currentConnection.GetTable<T>().TableName;
 
-            var result = currentConnection.Query<decimal?>($"SELECT IDENT_CURRENT('[{tableName}]') as Value")
+            var seqName = GetSequenceName<TEntity>(currentConnection);
+
+            var result = currentConnection.Query<int>($"SELECT COALESCE(last_value + CASE WHEN is_called THEN 1 ELSE 0 END, 1) as Value FROM {seqName};")
                 .FirstOrDefault();
 
-            return result.HasValue ? Convert.ToInt32(result) : 1;
+            return result;
         }
 
         /// <summary>
         /// Set table identity (is supported)
         /// </summary>
-        /// <typeparam name="TEntity">Entity</typeparam>
+        /// <typeparam name="TEntity">Entity type</typeparam>
         /// <param name="ident">Identity value</param>
         public virtual void SetTableIdent<TEntity>(int ident) where TEntity : BaseEntity
         {
-            using var currentConnection = CreateDataConnection();
             var currentIdent = GetTableIdent<TEntity>();
             if (!currentIdent.HasValue || ident <= currentIdent.Value)
                 return;
 
-            var tableName = currentConnection.GetTable<TEntity>().TableName;
+            using var currentConnection = CreateDataConnection();
 
-            currentConnection.Execute($"DBCC CHECKIDENT([{tableName}], RESEED, {ident})");
+            var seqName = GetSequenceName<TEntity>(currentConnection);
+
+            currentConnection.Execute($"select setval('{seqName}', {ident}, false);");
         }
 
         /// <summary>
@@ -166,9 +212,22 @@ namespace Nop.Data
         /// </summary>
         public virtual void BackupDatabase(string fileName)
         {
-            using var currentConnection = CreateDataConnection();
-            var commandText = $"BACKUP DATABASE [{currentConnection.Connection.Database}] TO DISK = '{fileName}' WITH FORMAT";
-            currentConnection.Execute(commandText);
+            throw new DataException("This database provider does not support backup");
+        }
+
+        public override TEntity InsertEntity<TEntity>(TEntity entity)
+        {
+            using var dataContext = CreateDataConnection();
+            try
+            {
+                entity.Id = dataContext.InsertWithInt32Identity(entity);
+            }
+            catch (global::LinqToDB.SqlQuery.SqlException ex) when (ex.Message.StartsWith("Identity field must be defined for"))
+            {
+                dataContext.Insert(entity);
+            }
+
+            return entity;
         }
 
         /// <summary>
@@ -177,25 +236,7 @@ namespace Nop.Data
         /// <param name="backupFileName">The name of the backup file</param>
         public virtual void RestoreDatabase(string backupFileName)
         {
-            using var currentConnection = CreateDataConnection();
-            var commandText = string.Format(
-                "DECLARE @ErrorMessage NVARCHAR(4000)\n" +
-                "ALTER DATABASE [{0}] SET OFFLINE WITH ROLLBACK IMMEDIATE\n" +
-                "BEGIN TRY\n" +
-                "RESTORE DATABASE [{0}] FROM DISK = '{1}' WITH REPLACE\n" +
-                "END TRY\n" +
-                "BEGIN CATCH\n" +
-                "SET @ErrorMessage = ERROR_MESSAGE()\n" +
-                "END CATCH\n" +
-                "ALTER DATABASE [{0}] SET MULTI_USER WITH ROLLBACK IMMEDIATE\n" +
-                "IF (@ErrorMessage is not NULL)\n" +
-                "BEGIN\n" +
-                "RAISERROR (@ErrorMessage, 16, 1)\n" +
-                "END",
-                currentConnection.Connection.Database,
-                backupFileName);
-
-            currentConnection.Execute(commandText);
+            throw new DataException("This database provider does not support backup");
         }
 
         /// <summary>
@@ -204,23 +245,7 @@ namespace Nop.Data
         public virtual void ReIndexTables()
         {
             using var currentConnection = CreateDataConnection();
-            var commandText = $@"
-                    DECLARE @TableName sysname 
-                    DECLARE cur_reindex CURSOR FOR
-                    SELECT table_name
-                    FROM [{currentConnection.Connection.Database}].information_schema.tables
-                    WHERE table_type = 'base table'
-                    OPEN cur_reindex
-                    FETCH NEXT FROM cur_reindex INTO @TableName
-                    WHILE @@FETCH_STATUS = 0
-                        BEGIN
-                            exec('ALTER INDEX ALL ON [' + @TableName + '] REBUILD')
-                            FETCH NEXT FROM cur_reindex INTO @TableName
-                        END
-                    CLOSE cur_reindex
-                    DEALLOCATE cur_reindex";
-
-            currentConnection.Execute(commandText);
+            currentConnection.Execute($"REINDEX DATABASE \"{currentConnection.Connection.Database}\";");
         }
 
         /// <summary>
@@ -233,19 +258,17 @@ namespace Nop.Data
             if (nopConnectionString is null)
                 throw new ArgumentNullException(nameof(nopConnectionString));
 
-            var builder = new SqlConnectionStringBuilder
-            {
-                DataSource = nopConnectionString.ServerName,
-                InitialCatalog = nopConnectionString.DatabaseName,
-                PersistSecurityInfo = false,
-                IntegratedSecurity = nopConnectionString.IntegratedSecurity
-            };
+            if (nopConnectionString.IntegratedSecurity)
+                throw new NopException("Data provider supports connection only with login and password");
 
-            if (!nopConnectionString.IntegratedSecurity)
+            var builder = new NpgsqlConnectionStringBuilder
             {
-                builder.UserID = nopConnectionString.Username;
-                builder.Password = nopConnectionString.Password;
-            }
+                Host = nopConnectionString.ServerName,
+                //Cast DatabaseName to lowercase to avoid case-sensitivity problems
+                Database = nopConnectionString.DatabaseName.ToLower(),
+                Username = nopConnectionString.Username,
+                Password = nopConnectionString.Password,
+            };
 
             return builder.ConnectionString;
         }
@@ -278,20 +301,11 @@ namespace Nop.Data
 
         #region Properties
 
-        /// <summary>
-        /// Sql server data provider
-        /// </summary>
-        protected override IDataProvider LinqToDbDataProvider => SqlServerTools.GetDataProvider(SqlServerVersion.v2008, SqlServerProvider.SystemDataSqlClient);
+        protected override IDataProvider LinqToDbDataProvider => new LinqToDBPostgreSQLDataProvider();
 
-        /// <summary>
-        /// Gets allowed a limit input value of the data for hashing functions, returns 0 if not limited
-        /// </summary>
-        public int SupportedLengthOfBinaryHash { get; } = 8000;
+        public int SupportedLengthOfBinaryHash => 0;
 
-        /// <summary>
-        /// Gets a value indicating whether this data provider supports backup
-        /// </summary>
-        public virtual bool BackupSupported => true;
+        public bool BackupSupported => false;
 
         #endregion
     }

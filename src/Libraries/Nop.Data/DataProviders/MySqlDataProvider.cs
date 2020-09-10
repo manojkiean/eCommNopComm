@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using LinqToDB;
 using LinqToDB.Data;
@@ -16,7 +14,7 @@ using Nop.Core;
 using Nop.Core.Infrastructure;
 using Nop.Data.Migrations;
 
-namespace Nop.Data
+namespace Nop.Data.DataProviders
 {
     public class MySqlNopDataProvider : BaseDataProvider, INopDataProvider
     {
@@ -82,7 +80,7 @@ namespace Nop.Data
             //now create connection string to 'master' database. It always exists.
             builder.Database = null;
 
-            using (var connection = CreateDbConnection(builder.ConnectionString))
+            using (var connection = GetInternalDbConnection(builder.ConnectionString))
             {
                 var query = $"CREATE DATABASE IF NOT EXISTS {databaseName};";
                 if (!string.IsNullOrWhiteSpace(collation))
@@ -123,7 +121,7 @@ namespace Nop.Data
         {
             try
             {
-                using (var connection = CreateDbConnection())
+                using (var connection = GetInternalDbConnection(CurrentConnectionString))
                 {
                     //just try to connect
                     connection.Open();
@@ -149,13 +147,13 @@ namespace Nop.Data
         /// <summary>
         /// Get the current identity value
         /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
+        /// <typeparam name="TEntity">Entity type</typeparam>
         /// <returns>Integer identity; null if cannot get the result</returns>
-        public virtual int? GetTableIdent<T>() where T : BaseEntity
+        public virtual int? GetTableIdent<TEntity>() where TEntity : BaseEntity
         {
             using (var currentConnection = CreateDataConnection())
             {
-                var tableName = currentConnection.GetTable<T>().TableName;
+                var tableName = GetEntityDescriptor<TEntity>().TableName;
                 var databaseName = currentConnection.Connection.Database;
 
                 //we're using the DbConnection object until linq2db solve this issue https://github.com/linq2db/linq2db/issues/1987
@@ -194,7 +192,7 @@ namespace Nop.Data
         /// <summary>
         /// Set table identity (is supported)
         /// </summary>
-        /// <typeparam name="TEntity">Entity</typeparam>
+        /// <typeparam name="TEntity">Entity type</typeparam>
         /// <param name="ident">Identity value</param>
         public virtual void SetTableIdent<TEntity>(int ident) where TEntity : BaseEntity
         {
@@ -203,7 +201,7 @@ namespace Nop.Data
                 return;
 
             using var currentConnection = CreateDataConnection();
-            var tableName = currentConnection.GetTable<TEntity>().TableName;
+            var tableName = GetEntityDescriptor<TEntity>().TableName;
 
             currentConnection.Execute($"ALTER TABLE `{tableName}` AUTO_INCREMENT = {ident};");
         }
