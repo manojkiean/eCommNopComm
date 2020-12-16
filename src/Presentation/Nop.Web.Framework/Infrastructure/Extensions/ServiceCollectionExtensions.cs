@@ -35,7 +35,7 @@ using Nop.Web.Framework.Mvc.Routing;
 using Nop.Web.Framework.Security.Captcha;
 using Nop.Web.Framework.Themes;
 using StackExchange.Profiling.Storage;
-using WebMarkupMin.AspNetCore3;
+using WebMarkupMin.AspNetCore5;
 using WebMarkupMin.NUglify;
 
 namespace Nop.Web.Framework.Infrastructure.Extensions
