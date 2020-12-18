@@ -91,7 +91,7 @@ namespace Nop.Web.Controllers
         
         #region Categories
         
-        public virtual IActionResult Category(int categoryId, CatalogPagingFilteringModel command)
+        public virtual IActionResult Category(int categoryId, CatalogProductsModel command)
         {
             var category = _categoryService.GetCategoryById(categoryId);
             if (category == null || category.Deleted)
@@ -154,7 +154,7 @@ namespace Nop.Web.Controllers
 
         #region Manufacturers
 
-        public virtual IActionResult Manufacturer(int manufacturerId, CatalogPagingFilteringModel command)
+        public virtual IActionResult Manufacturer(int manufacturerId, CatalogProductsModel command)
         {
             var manufacturer = _manufacturerService.GetManufacturerById(manufacturerId);
             if (manufacturer == null || manufacturer.Deleted)
@@ -205,7 +205,7 @@ namespace Nop.Web.Controllers
 
         #region Vendors
 
-        public virtual IActionResult Vendor(int vendorId, CatalogPagingFilteringModel command)
+        public virtual IActionResult Vendor(int vendorId, CatalogProductsModel command)
         {
             var vendor = _vendorService.GetVendorById(vendorId);
             if (vendor == null || vendor.Deleted || !vendor.Active)
@@ -241,7 +241,7 @@ namespace Nop.Web.Controllers
 
         #region Product tags
         
-        public virtual IActionResult ProductsByTag(int productTagId, CatalogPagingFilteringModel command)
+        public virtual IActionResult ProductsByTag(int productTagId, CatalogProductsModel command)
         {
             var productTag = _productTagService.GetProductTagById(productTagId);
             if (productTag == null)
@@ -261,7 +261,7 @@ namespace Nop.Web.Controllers
 
         #region Searching
 
-        public virtual IActionResult Search(SearchModel model, CatalogPagingFilteringModel command)
+        public virtual IActionResult Search(SearchModel model, CatalogProductsModel command)
         {
             //'Continue shopping' URL
             _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer,

@@ -13,26 +13,26 @@ namespace Nop.Web.Factories
         /// <summary>
         /// Prepare sorting options
         /// </summary>
-        /// <param name="pagingFilteringModel">Catalog paging filtering model</param>
-        /// <param name="command">Catalog paging filtering command</param>
-        void PrepareSortingOptions(CatalogPagingFilteringModel pagingFilteringModel, CatalogPagingFilteringModel command);
+        /// <param name="displayingModel">Products displaying model</param>
+        /// <param name="command">Products displaying model</param>
+        void PrepareSortingOptions(CatalogProductsDisplayingModel displayingModel, CatalogProductsDisplayingModel command);
 
         /// <summary>
         /// Prepare view modes
         /// </summary>
-        /// <param name="pagingFilteringModel">Catalog paging filtering model</param>
-        /// <param name="command">Catalog paging filtering command</param>
-        void PrepareViewModes(CatalogPagingFilteringModel pagingFilteringModel, CatalogPagingFilteringModel command);
+        /// <param name="displayingModel">Products displaying model</param>
+        /// <param name="command">Products displaying model</param>
+        void PrepareViewModes(CatalogProductsDisplayingModel displayingModel, CatalogProductsDisplayingModel command);
 
         /// <summary>
         /// Prepare page size options
         /// </summary>
-        /// <param name="pagingFilteringModel">Catalog paging filtering model</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="productsModel">Catalog products model</param>
+        /// <param name="command">Catalog products model</param>
         /// <param name="allowCustomersToSelectPageSize">Are customers allowed to select page size?</param>
         /// <param name="pageSizeOptions">Page size options</param>
         /// <param name="fixedPageSize">Fixed page size</param>
-        void PreparePageSizeOptions(CatalogPagingFilteringModel pagingFilteringModel, CatalogPagingFilteringModel command,
+        void PreparePageSizeOptions(CatalogProductsModel productsModel, CatalogProductsModel command,
             bool allowCustomersToSelectPageSize, string pageSizeOptions, int fixedPageSize);
 
         #endregion
@@ -43,9 +43,9 @@ namespace Nop.Web.Factories
         /// Prepare category model
         /// </summary>
         /// <param name="category">Category</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="command">Catalog products model</param>
         /// <returns>Category model</returns>
-        CategoryModel PrepareCategoryModel(Category category, CatalogPagingFilteringModel command);
+        CategoryModel PrepareCategoryModel(Category category, CatalogProductsModel command);
 
         /// <summary>
         /// Prepare category template view path
@@ -116,9 +116,9 @@ namespace Nop.Web.Factories
         /// Prepare manufacturer model
         /// </summary>
         /// <param name="manufacturer">Manufacturer identifier</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="command">Catalog products model</param>
         /// <returns>Manufacturer model</returns>
-        ManufacturerModel PrepareManufacturerModel(Manufacturer manufacturer, CatalogPagingFilteringModel command);
+        ManufacturerModel PrepareManufacturerModel(Manufacturer manufacturer, CatalogProductsModel command);
 
         /// <summary>
         /// Prepare manufacturer template view path
@@ -148,9 +148,9 @@ namespace Nop.Web.Factories
         /// Prepare vendor model
         /// </summary>
         /// <param name="vendor">Vendor</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="command">Catalog products model</param>
         /// <returns>Vendor model</returns>
-        VendorModel PrepareVendorModel(Vendor vendor, CatalogPagingFilteringModel command);
+        VendorModel PrepareVendorModel(Vendor vendor, CatalogProductsModel command);
 
         /// <summary>
         /// Prepare vendor all models
@@ -178,10 +178,9 @@ namespace Nop.Web.Factories
         /// Prepare products by tag model
         /// </summary>
         /// <param name="productTag">Product tag</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="command">Catalog products model</param>
         /// <returns>Products by tag model</returns>
-        ProductsByTagModel PrepareProductsByTagModel(ProductTag productTag,
-            CatalogPagingFilteringModel command);
+        ProductsByTagModel PrepareProductsByTagModel(ProductTag productTag, CatalogProductsModel command);
 
         /// <summary>
         /// Prepare product tags all model
@@ -197,9 +196,9 @@ namespace Nop.Web.Factories
         /// Prepare search model
         /// </summary>
         /// <param name="model">Search model</param>
-        /// <param name="command">Catalog paging filtering command</param>
+        /// <param name="command">Catalog products model</param>
         /// <returns>Search model</returns>
-        SearchModel PrepareSearchModel(SearchModel model, CatalogPagingFilteringModel command);
+        SearchModel PrepareSearchModel(SearchModel model, CatalogProductsModel command);
 
         /// <summary>
         /// Prepare search box model
